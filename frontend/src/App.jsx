@@ -1,48 +1,61 @@
 import { useState, useEffect } from "react";
-import { io } from "socket.io-client";
+import axios from "axios";
 import Editor from "@monaco-editor/react";
 import "./App.css";
-
-const socket = io("http://localhost:5000");
 
 function App() {
   const [code, setCode] = useState("");
   const [output, setOutput] = useState("");
   const [language, setLanguage] = useState("python3");
   const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const templates = {
     python3: "print('Hello World')",
-    nodejs: "console.log('Hello World');"
+    nodejs: "console.log('Hello World');",
+    cpp17: `#include <iostream>
+using namespace std;
+
+int main() {
+  int n;
+  cin >> n;
+  cout << n;
+  return 0;
+}`,
+    java: `public class Main {
+  public static void main(String[] args) {
+    System.out.println("Hello World");
+  }
+}`
   };
 
   useEffect(() => {
     setCode(templates[language]);
-
-    socket.on("output", (data) => {
-      setOutput((prev) => prev + data);
-    });
-
-    return () => socket.off("output");
   }, [language]);
 
-  const runCode = () => {
-    setOutput("");
-    socket.emit("run", { code, language });
-  };
+  const runCode = async () => {
+    setLoading(true);
+    setOutput("Running...\n");
 
-  const handleInput = (e) => {
-    if (e.key === "Enter") {
-      socket.emit("input", input);
-      setOutput((prev) => prev + input + "\n");
-      setInput("");
+    try {
+      const res = await axios.post("http://localhost:5000/run", {
+        code,
+        language,
+        input
+      });
+
+      setOutput(res.data.output || "No output");
+    } catch {
+      setOutput("Error running code");
     }
+
+    setLoading(false);
   };
 
   return (
     <div className="app">
       <div className="header">
-        <h2>Real Compiler</h2>
+        <h2>Online Compiler</h2>
 
         <select
           value={language}
@@ -50,32 +63,48 @@ function App() {
         >
           <option value="python3">Python</option>
           <option value="nodejs">JavaScript</option>
+          <option value="cpp17">C++</option>
+          <option value="java">Java</option>
         </select>
 
-        <button onClick={runCode}>Run ▶</button>
+        <button onClick={runCode}>
+          {loading ? "Running..." : "Run ▶"}
+        </button>
       </div>
 
       <div className="main">
         <div className="editor">
           <Editor
-            height="100%"
+            height="60%"
             theme="vs-dark"
-            language={language === "nodejs" ? "javascript" : "python"}
+            language={
+              language === "nodejs"
+                ? "javascript"
+                : language === "cpp17"
+                ? "cpp"
+                : language === "python3"
+                ? "python"
+                : "java"
+            }
             value={code}
             onChange={(val) => setCode(val)}
           />
         </div>
 
-        <div className="output">
-          <h3>Terminal</h3>
-          <pre>{output}</pre>
+        <div className="side">
+          <div className="input-box">
+            <h3>Input</h3>
+            <textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Enter input"
+            />
+          </div>
 
-          <input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleInput}
-            placeholder="Type input and press Enter"
-          />
+          <div className="output">
+            <h3>Output</h3>
+            <pre>{output}</pre>
+          </div>
         </div>
       </div>
     </div>
