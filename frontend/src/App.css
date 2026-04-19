@@ -1,0 +1,84 @@
+/* Reset */
+body {
+  margin: 0;
+  background: #1e1e1e;
+  color: white;
+  font-family: Arial, sans-serif;
+}
+
+/* App container */
+.app {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Header */
+.header {
+  background: #2d2d2d;
+  padding: 10px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+/* Main layout (VERTICAL) */
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column; /* 👈 KEY CHANGE */
+}
+
+/* Editor takes top space */
+.editor {
+  height: 50%;
+}
+
+/* Input + Output stack */
+.side {
+  height: 50%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Input box */
+.input-box {
+  flex: 1;
+  padding: 10px;
+  background: #111;
+  border-top: 1px solid #333;
+}
+
+/* Output box */
+.output {
+  flex: 1;
+  padding: 10px;
+  background: #111;
+  border-top: 1px solid #333;
+  overflow: auto;
+}
+
+/* Textarea */
+textarea {
+  width: 100%;
+  height: 80%;
+  background: #222;
+  color: white;
+  border: none;
+  padding: 10px;
+}
+
+/* Output text */
+pre {
+  white-space: pre-wrap;
+}
+
+/* Button */
+button {
+  background: #007acc;
+  border: none;
+  padding: 8px 12px;
+  color: white;
+  cursor: pointer;
+  border-radius: 5px;
+}
