@@ -4,6 +4,7 @@ import { spawn } from "child_process";
 import fs from "fs";
 import http from "http";
 import { Server } from "socket.io";
+import path from "path";
 
 const app = express();
 app.use(cors());
@@ -14,65 +15,84 @@ const io = new Server(server, {
   cors: { origin: "*" }
 });
 
+// 🔥 temp directory
+const tempDir = "./temp";
+if (!fs.existsSync(tempDir)) {
+  fs.mkdirSync(tempDir);
+}
+
 let processes = {};
 
 io.on("connection", (socket) => {
   console.log("Client connected:", socket.id);
 
   socket.on("run", ({ code, language }) => {
+    const id = Date.now();
     let fileName = "";
-    let cmd = "";
-    let args = [];
+    let exeName = "";
+    let proc;
 
     try {
-      // 🧠 JS (CommonJS fix)
+      // 🟡 NODE JS
       if (language === "nodejs") {
-        fileName = "code.cjs";
+        fileName = `${tempDir}/code_${id}.cjs`;
         fs.writeFileSync(fileName, code);
-        cmd = "node";
-        args = [fileName];
+
+        proc = spawn("node", [fileName], {
+          stdio: ["pipe", "pipe", "pipe"]
+        });
       }
 
-      // 🧠 Python (UNBUFFERED FIX 🔥)
+      // 🟢 PYTHON
       else if (language === "python3") {
-        fileName = "code.py";
+        fileName = `${tempDir}/code_${id}.py`;
         fs.writeFileSync(fileName, code);
-        cmd = "python";
-        args = ["-u", fileName]; // 🔥 CRITICAL FIX
+
+        proc = spawn("python", ["-u", fileName], {
+          stdio: ["pipe", "pipe", "pipe"]
+        });
       }
 
-      // 🧠 Spawn with proper stdio
-      const proc = spawn(cmd, args, {
-        stdio: ["pipe", "pipe", "pipe"]
-      });
+      // 🔵 C++
+      else if (language === "cpp17") {
+        fileName = `${tempDir}/code_${id}.cpp`;
+        exeName = `${tempDir}/out_${id}.exe`;
+
+        fs.writeFileSync(fileName, code);
+
+        // Compile first
+        const compile = spawn("g++", [fileName, "-o", exeName]);
+
+        compile.stderr.on("data", (data) => {
+          socket.emit("output", data.toString());
+        });
+
+        compile.on("close", (code) => {
+          if (code !== 0) return;
+
+          // Run after compile
+          proc = spawn(exeName, [], {
+            stdio: ["pipe", "pipe", "pipe"]
+          });
+
+          processes[socket.id] = proc;
+
+          attachProcessHandlers(proc, socket, fileName, exeName);
+        });
+
+        return;
+      }
 
       processes[socket.id] = proc;
-
-      // 🔥 LIVE OUTPUT
-      proc.stdout.on("data", (data) => {
-        const text = data.toString();
-        console.log("STDOUT:", text);
-        socket.emit("output", text);
-      });
-
-      proc.stderr.on("data", (data) => {
-        const text = data.toString();
-        console.log("STDERR:", text);
-        socket.emit("output", text);
-      });
-
-      proc.on("close", (code) => {
-        socket.emit("output", `\n[Process Ended with code ${code}]\n`);
-        delete processes[socket.id];
-      });
+      attachProcessHandlers(proc, socket, fileName);
 
     } catch (err) {
-      socket.emit("output", "Error starting process\n");
       console.error(err);
+      socket.emit("output", "Error starting process\n");
     }
   });
 
-  // 🔥 INPUT HANDLER (FIXED)
+  // 🔥 INPUT
   socket.on("input", (data) => {
     const proc = processes[socket.id];
 
@@ -81,19 +101,14 @@ io.on("connection", (socket) => {
       return;
     }
 
-    console.log("INPUT:", data);
-
     try {
-      proc.stdin.write(data + "\n"); // 👈 MUST HAVE NEWLINE
+      proc.stdin.write(data + "\n");
     } catch (err) {
       console.error("stdin error:", err);
-      socket.emit("output", "\n[Input error]\n");
     }
   });
 
   socket.on("disconnect", () => {
-    console.log("Disconnected:", socket.id);
-
     if (processes[socket.id]) {
       processes[socket.id].kill();
       delete processes[socket.id];
@@ -101,6 +116,29 @@ io.on("connection", (socket) => {
   });
 });
 
+// 🔧 attach handlers
+function attachProcessHandlers(proc, socket, fileName, exeName = null) {
+  proc.stdout.on("data", (data) => {
+    socket.emit("output", data.toString());
+  });
+
+  proc.stderr.on("data", (data) => {
+    socket.emit("output", data.toString());
+  });
+
+  proc.on("close", () => {
+    socket.emit("output", "\n[Process Ended]\n");
+
+    // 🧹 cleanup files
+    try {
+      if (fileName && fs.existsSync(fileName)) fs.unlinkSync(fileName);
+      if (exeName && fs.existsSync(exeName)) fs.unlinkSync(exeName);
+    } catch (e) {
+      console.log("Cleanup error:", e.message);
+    }
+  });
+}
+
 server.listen(5000, () => {
-  console.log("🔥 WebSocket terminal running on http://localhost:5000");
+  console.log("🔥 Compiler running at http://localhost:5000");
 });
