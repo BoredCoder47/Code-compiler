@@ -3,6 +3,8 @@ import axios from "axios";
 import Editor from "@monaco-editor/react";
 import "./App.css";
 
+const API_URL = import.meta.env.VITE_API_URL;
+
 function App() {
   const [code, setCode] = useState("");
   const [output, setOutput] = useState("");
@@ -38,14 +40,14 @@ int main() {
     setOutput("Running...\n");
 
     try {
-      const res = await axios.post("http://localhost:5000/run", {
+      const res = await axios.post(`${API_URL}/run`, {
         code,
         language,
         input
       });
 
       setOutput(res.data.output || "No output");
-    } catch {
+    } catch (err) {
       setOutput("Error running code");
     }
 
