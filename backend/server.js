@@ -10,9 +10,7 @@ const app = express();
 
 /* ================= MIDDLEWARE ================= */
 
-app.use(cors({
-  origin: "*"
-}));
+app.use(cors({ origin: "*" }));
 app.use(express.json());
 
 /* ================= SUPABASE ================= */
@@ -45,7 +43,7 @@ const getVersionIndex = (language) => {
   }
 };
 
-/* ================= HEALTH CHECK (important for Render) ================= */
+/* ================= HEALTH CHECK ================= */
 
 app.get("/", (req, res) => {
   res.send("✅ Backend running");
@@ -55,10 +53,14 @@ app.get("/", (req, res) => {
 
 app.post("/run", async (req, res) => {
   try {
-    const { code, language, input } = req.body;
+    const { code, language, input, userId } = req.body;
 
     if (!code || !language) {
       return res.status(400).json({ error: "Missing code or language" });
+    }
+
+    if (!userId) {
+      return res.status(400).json({ error: "User not authenticated" });
     }
 
     const response = await axios.post(
@@ -82,11 +84,17 @@ app.post("/run", async (req, res) => {
     const { error: dbError } = await supabase
       .from("runs")
       .insert([
-        { code, language, input, output: result }
+        {
+          code,
+          language,
+          input,
+          output: result,
+          user_id: userId
+        }
       ]);
 
     if (dbError) {
-      console.error("❌ Supabase insert error:", dbError.message);
+      console.error("❌ Supabase insert error:", dbError);
     }
 
     res.json({ output: result });
@@ -100,17 +108,21 @@ app.post("/run", async (req, res) => {
   }
 });
 
-/* ================= HISTORY ================= */
+/* ================= USER HISTORY ================= */
 
-app.get("/history", async (req, res) => {
+app.get("/history/:userId", async (req, res) => {
   try {
+    const { userId } = req.params;
+
     const { data, error } = await supabase
       .from("runs")
       .select("*")
+      .eq("user_id", userId)
       .order("created_at", { ascending: false })
-      .limit(10);
+      .limit(20);
 
     if (error) {
+      console.error("❌ History fetch error:", error);
       return res.status(500).json({ error: error.message });
     }
 
