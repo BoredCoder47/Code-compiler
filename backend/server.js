@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import axios from "axios";
 import dotenv from "dotenv";
+import { createClient } from "@supabase/supabase-js";
 
 dotenv.config();
 
@@ -9,10 +10,18 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+/* ================= SUPABASE ================= */
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_KEY
+);
+
+/* ================= JDoodle Config ================= */
+
 const CLIENT_ID = process.env.CLIENT_ID;
 const CLIENT_SECRET = process.env.CLIENT_SECRET;
 
-// 🎯 Language version mapping
 const getVersionIndex = (language) => {
   switch (language) {
     case "python3": return "3";
@@ -22,6 +31,8 @@ const getVersionIndex = (language) => {
     default: return "0";
   }
 };
+
+/* ================= RUN CODE ================= */
 
 app.post("/run", async (req, res) => {
   try {
@@ -43,12 +54,26 @@ app.post("/run", async (req, res) => {
       }
     );
 
-    res.json({
-      output:
-        response.data.output ||
-        response.data.error ||
-        "No output"
-    });
+    const result =
+      response.data.output ||
+      response.data.error ||
+      "No output";
+
+    /* ===== SAVE TO SUPABASE ===== */
+    const { error } = await supabase.from("runs").insert([
+      {
+        code,
+        language,
+        input,
+        output: result
+      }
+    ]);
+
+    if (error) {
+      console.error("Supabase insert error:", error.message);
+    }
+
+    res.json({ output: result });
 
   } catch (error) {
     console.error("ERROR:", error.response?.data || error.message);
@@ -59,6 +84,31 @@ app.post("/run", async (req, res) => {
   }
 });
 
-app.listen(5000, () => {
-  console.log("JDoodle backend running on http://localhost:5000");
+/* ================= HISTORY ================= */
+
+app.get("/history", async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from("runs")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(10);
+
+    if (error) {
+      return res.status(500).json({ error: error.message });
+    }
+
+    res.json(data);
+
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch history" });
+  }
+});
+
+/* ================= SERVER ================= */
+
+const PORT = process.env.PORT || 5000;
+
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
 });
