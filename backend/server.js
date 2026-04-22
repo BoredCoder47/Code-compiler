@@ -7,20 +7,33 @@ import { createClient } from "@supabase/supabase-js";
 dotenv.config();
 
 const app = express();
-app.use(cors());
+
+/* ================= MIDDLEWARE ================= */
+
+app.use(cors({
+  origin: "*"
+}));
 app.use(express.json());
 
 /* ================= SUPABASE ================= */
+
+if (!process.env.SUPABASE_URL || !process.env.SUPABASE_KEY) {
+  console.error("❌ Supabase env variables missing");
+}
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_KEY
 );
 
-/* ================= JDoodle Config ================= */
+/* ================= JDoodle ================= */
 
 const CLIENT_ID = process.env.CLIENT_ID;
 const CLIENT_SECRET = process.env.CLIENT_SECRET;
+
+if (!CLIENT_ID || !CLIENT_SECRET) {
+  console.error("❌ JDoodle credentials missing");
+}
 
 const getVersionIndex = (language) => {
   switch (language) {
@@ -31,6 +44,12 @@ const getVersionIndex = (language) => {
     default: return "0";
   }
 };
+
+/* ================= HEALTH CHECK (important for Render) ================= */
+
+app.get("/", (req, res) => {
+  res.send("✅ Backend running");
+});
 
 /* ================= RUN CODE ================= */
 
@@ -48,7 +67,7 @@ app.post("/run", async (req, res) => {
         clientId: CLIENT_ID,
         clientSecret: CLIENT_SECRET,
         script: code,
-        language: language,
+        language,
         versionIndex: getVersionIndex(language),
         stdin: input || ""
       }
@@ -60,23 +79,20 @@ app.post("/run", async (req, res) => {
       "No output";
 
     /* ===== SAVE TO SUPABASE ===== */
-    const { error } = await supabase.from("runs").insert([
-      {
-        code,
-        language,
-        input,
-        output: result
-      }
-    ]);
+    const { error: dbError } = await supabase
+      .from("runs")
+      .insert([
+        { code, language, input, output: result }
+      ]);
 
-    if (error) {
-      console.error("Supabase insert error:", error.message);
+    if (dbError) {
+      console.error("❌ Supabase insert error:", dbError.message);
     }
 
     res.json({ output: result });
 
   } catch (error) {
-    console.error("ERROR:", error.response?.data || error.message);
+    console.error("❌ ERROR:", error.response?.data || error.message);
 
     res.status(500).json({
       error: "Execution failed"
@@ -101,6 +117,7 @@ app.get("/history", async (req, res) => {
     res.json(data);
 
   } catch (err) {
+    console.error("❌ History error:", err.message);
     res.status(500).json({ error: "Failed to fetch history" });
   }
 });
